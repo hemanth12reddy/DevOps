@@ -32,59 +32,10 @@ runs:
         base_branch=${{ github.event.pull_request.base.sha }}
         feature_branch=${{ github.event.pull_request.head.sha }}
     
-        # Get the list of changed directories
-        changed_dirs=$(git diff --name-only $base_branch $feature_branch | awk -F'/' '{print $1"/"$2}' | sort -u)
-    
-        echo "Changed directories: $changed_dirs"
-    
-        if [[ -z "$changed_dirs" ]]; then
-          echo "No changed directories found. Skipping service check."
-          echo "matrix_services=[]" >> $GITHUB_OUTPUT
-          exit 0
-        fi
-    
-        # Initialize an array to store matched services
-        services=()
-    
-        # Loop through each changed directory and find the corresponding service in config.json
-        while read -r changed_dir; do
-          # Get services that match the changed directory
-          matched_services=$(jq -r --arg dir "$changed_dir" \
-            '. | to_entries | map(select(.value.service_source_path | contains($dir))) | .[].key' build/config.json)
-          
-          # Add matched services to the services array
-          if [[ -n "$matched_services" ]]; then
-            services+=($matched_services)
-          fi
-        done <<< "$changed_dirs"
-    
-        # Remove duplicates and format as a JSON array
-        if [[ ${#services[@]} -gt 0 ]]; then
-          unique_services=$(echo "${services[@]}" | tr ' ' '\n' | sort -u | jq -R -s 'split("\n") | map(select(. != ""))')
-          echo "matrix_services=$unique_services" >> $GITHUB_OUTPUT
-        else
-          echo "No matching services found in config.json. Skipping service check."
-          echo "matrix_services=[]" >> $GITHUB_OUTPUT
-        fi
+        readarray -t changed_dirs < <(git diff --name-only $base_branch $feature_branch | awk -F'/' '{print $1"/"$2}' | sort -u)
 
-    - name: Set up matrix
-      id: matrix
-      shell: bash
-      run: |
-        echo "Setting up matrix for the affected services..."
-        matrix_json="${{ steps.set_matrix.outputs.matrix_services }}"
-        echo "matrix_services=$matrix_json" >> $GITHUB_OUTPUT
-        echo "matrix_services array: $matrix_json"
-
-    - name: Create matrix strategy
-      uses: actions/github-script@v6
-      with:
-        script: |
-          const matrix = JSON.parse("${{ steps.set_matrix.outputs.matrix_services }}");
-          const matrixConfig = {
-            matrix: {
-              service: matrix.length ? matrix : ["none"]  # Handle no services scenario
-            }
-          };
-          console.log("Generated matrix configuration:", matrixConfig);
-          return matrixConfig;
+        # Iterate through the changed directories
+        for changed_dir in "${changed_dirs[@]}"; do
+          # Use jq to find matching services and print only the key
+          jq -r 'to_entries[] | select(.value.service_source_path | contains("'"$changed_dir"'")) | .key' build/config.json
+        done | sort -u
