@@ -33,6 +33,8 @@ runs:
         feature_branch=${{ github.event.pull_request.head.sha }}
         changed_dirs=$(git diff --name-only $base_branch $feature_branch | awk -F'/' '{print $1"/"$2}' | sort -u)
 
+        echo "Changed directories: $changed_dirs"
+
         if [[ -z "$changed_dirs" ]]; then
           echo "No changed directories found. Skipping service check."
           echo "matrix_services=[]" >> $GITHUB_OUTPUT
