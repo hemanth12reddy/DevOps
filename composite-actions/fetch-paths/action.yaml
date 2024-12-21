@@ -43,16 +43,26 @@ runs:
           exit 0
         fi
     
-        # Build the matrix of services by matching changed directories with config.json
-        services=$(echo "$changed_dirs" | while read -r changed_dir; do
-          jq -r --arg dir "$changed_dir" \
-            '. | to_entries | map(select(.value.service_source_path | contains($dir))) | .[].key' build/config.json
-        done | sort -u | jq -R -s 'split("\n") | map(select(. != ""))')
+        # Initialize an array to store matched services
+        services=()
     
-        if [[ -z "$services" || "$services" == "[]" ]]; then
+        # Loop through each changed directory and find the corresponding service in config.json
+        while read -r changed_dir; do
+          # Get services that match the changed directory
+          matched_services=$(jq -r --arg dir "$changed_dir" \
+            '. | to_entries | map(select(.value.service_source_path | contains($dir))) | .[].key' build/config.json)
+          
+          # Add matched services to the services array
+          if [[ -n "$matched_services" ]]; then
+            services+=($matched_services)
+          fi
+        done <<< "$changed_dirs"
+    
+        # Remove duplicates and format as a JSON array
+        if [[ ${#services[@]} -gt 0 ]]; then
+          unique_services=$(echo "${services[@]}" | tr ' ' '\n' | sort -u | jq -R -s 'split("\n") | map(select(. != ""))')
+          echo "matrix_services=$unique_services" >> $GITHUB_OUTPUT
+        else
           echo "No matching services found in config.json. Skipping service check."
           echo "matrix_services=[]" >> $GITHUB_OUTPUT
-          exit 0
         fi
-    
-        echo "matrix_services=$services" >> $GITHUB_OUTPUT
