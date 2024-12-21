@@ -36,6 +36,8 @@ runs:
 
         echo "debug jq installation"
 
+        sudo apt-get install jq -y
+
         jq
 
         if [[ -z "$changed_dirs" ]]; then
