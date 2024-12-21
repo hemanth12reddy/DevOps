@@ -1,0 +1,51 @@
+name: 'Check Services'
+
+description: 'Checks which services are affected by changes and outputs a matrix.'
+
+outputs:
+  matrix_services:
+    description: 'JSON array of affected services.'
+    value: ${{ steps.set_matrix.outputs.matrix_services }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+      with:
+        ref: ${{ github.event.pull_request.head.sha }}
+        fetch-depth: 0
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.20'
+
+    - name: Install jq
+      run: go install github.com/stedolan/jq@latest
+
+    - name: Get changed directories and set matrix
+      id: set_matrix
+      shell: bash
+      run: |
+        base_branch=${{ github.event.pull_request.base.sha }}
+        feature_branch=${{ github.event.pull_request.head.sha }}
+        changed_dirs=$(git diff --name-only $base_branch $feature_branch | awk -F'/' '{print $1"/"$2}' | sort -u)
+
+        if [[ -z "$changed_dirs" ]]; then
+          echo "No changed directories found. Skipping service check."
+          echo "matrix_services=[]" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+
+        services=$(for changed_dir in $changed_dirs; do
+          jq -r 'to_entries[] | select(.value.service_source_path | contains("'"$changed_dir"'")) | .key' build/config.json
+        done | sort -u | jq -r -s 'map(.)')
+
+        if [[ -z "$services" ]]; then
+          echo "No matching services found in config.json. Skipping service check."
+          echo "matrix_services=[]" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+
+        echo "matrix_services=$services" >> $GITHUB_OUTPUT
