@@ -66,3 +66,25 @@ runs:
           echo "No matching services found in config.json. Skipping service check."
           echo "matrix_services=[]" >> $GITHUB_OUTPUT
         fi
+
+    - name: Set up matrix
+      id: matrix
+      shell: bash
+      run: |
+        echo "Setting up matrix for the affected services..."
+        matrix_json="${{ steps.set_matrix.outputs.matrix_services }}"
+        echo "matrix_services=$matrix_json" >> $GITHUB_OUTPUT
+        echo "matrix_services array: $matrix_json"
+
+    - name: Create matrix strategy
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const matrix = JSON.parse("${{ steps.set_matrix.outputs.matrix_services }}");
+          const matrixConfig = {
+            matrix: {
+              service: matrix.length ? matrix : ["none"]  # Handle no services scenario
+            }
+          };
+          console.log("Generated matrix configuration:", matrixConfig);
+          return matrixConfig;
