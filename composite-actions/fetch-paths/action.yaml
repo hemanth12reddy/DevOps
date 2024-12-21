@@ -28,32 +28,31 @@ runs:
       id: set_matrix
       shell: bash
       run: |
+        # Get the base and feature branch SHAs
         base_branch=${{ github.event.pull_request.base.sha }}
         feature_branch=${{ github.event.pull_request.head.sha }}
+    
+        # Get the list of changed directories
         changed_dirs=$(git diff --name-only $base_branch $feature_branch | awk -F'/' '{print $1"/"$2}' | sort -u)
-
+    
         echo "Changed directories: $changed_dirs"
-
-        echo "debug jq installation"
-
-        sudo apt-get install jq -y
-
-        jq
-
+    
         if [[ -z "$changed_dirs" ]]; then
           echo "No changed directories found. Skipping service check."
           echo "matrix_services=[]" >> $GITHUB_OUTPUT
           exit 0
         fi
-
-        services=$(for changed_dir in $changed_dirs; do
-          jq -r 'to_entries[] | select(.value.service_source_path | contains("'"$changed_dir"'")) | .key' build/config.json
-        done | sort -u | jq -r -s 'map(.)')
-
-        if [[ -z "$services" ]]; then
+    
+        # Build the matrix of services by matching changed directories with config.json
+        services=$(echo "$changed_dirs" | while read -r changed_dir; do
+          jq -r --arg dir "$changed_dir" \
+            '. | to_entries | map(select(.value.service_source_path | contains($dir))) | .[].key' build/config.json
+        done | sort -u | jq -R -s 'split("\n") | map(select(. != ""))')
+    
+        if [[ -z "$services" || "$services" == "[]" ]]; then
           echo "No matching services found in config.json. Skipping service check."
           echo "matrix_services=[]" >> $GITHUB_OUTPUT
           exit 0
         fi
-
+    
         echo "matrix_services=$services" >> $GITHUB_OUTPUT
