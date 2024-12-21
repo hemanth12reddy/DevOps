@@ -34,6 +34,10 @@ runs:
 
         echo "Changed directories: $changed_dirs"
 
+        echo "debug jq installation"
+
+        jq
+
         if [[ -z "$changed_dirs" ]]; then
           echo "No changed directories found. Skipping service check."
           echo "matrix_services=[]" >> $GITHUB_OUTPUT
